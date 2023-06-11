@@ -2,13 +2,18 @@ package com.jali.security.config;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoder;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
 import java.util.Base64;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 @Service // To make it a managed bean
@@ -78,9 +83,44 @@ public class Jwtservice {
         return claimsResolver.apply(claims);
     }
 
+    // What if we need to generate only with user details
+    public String generateToken(UserDetails userDetails){
+        return generateToken(new HashMap<>(), userDetails);
+    }
 
 
+    // Lets create a method to generate the token that uses the username and claims
+    public String generateToken(
+            Map<String, Object> extractClaims, // This will contain the extracted claims that we need to add like add authorities
+            UserDetails userDetails // User details
 
+    ){
+        return Jwts
+                .builder()
+                .setClaims(extractClaims) // Set our claims
+                .setSubject(userDetails.getUsername()) // The subject is the userEmail
+                .setIssuedAt(new Date(System.currentTimeMillis())) // When the token is created
+                .setExpiration(new Date(System.currentTimeMillis() * 1000 * 24)) // How long does the token valid
+                .signWith(getSignInKey(), SignatureAlgorithm.HS256) // Which key that you need to sign this token
+                .compact(); // The method that will generate and return the token
+    }
+
+
+    // This is the method to validate a token
+    public boolean isTakenValid(String token, UserDetails userDetails){ // Why we need user details here is, we need to check whether the given token is relevant to the user.
+    final String userName = extractUsername(token); // Take the userName (email actually)
+    return (userName.equals(userDetails.getUsername())) && !isTakenExpired(token);
+    }
+
+    // Check weather the taken is expired
+    private boolean isTakenExpired(String token) {
+    return extractExpiration(token).before(new Date()); // Check weather the expiration date is before today
+    }
+
+    // Extracting the expiration date of the token
+    private Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
 
     // A method to extract all the claims
 

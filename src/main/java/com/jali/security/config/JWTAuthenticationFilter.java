@@ -12,6 +12,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.antlr.v4.runtime.misc.NotNull;
 import org.hibernate.annotations.NotFound;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -32,7 +37,8 @@ import java.io.IOException;
 public class JWTAuthenticationFilter extends OncePerRequestFilter {
 
     private final Jwtservice jwtservice;
-
+    private final UserDetailsService userDetailsService; // Implementation for line 63
+    // But we need our own implementation for this interface hence we need to create a separate class and make it a managed bean so that, spring will inject that in
     @Override
     protected void doFilterInternal(
             // These parameters should not be null. Hence we have to add @Notnull annotation for these.
@@ -55,6 +61,27 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
         // After having the token we need to call the UserDetailsService to check weather we are having that user in the database.
         // To do that we need to call the JwtService to extract userName.
         // For that we need a class that can handle the token. We gonna coll that class, "JwtService".
-        userEmail = jwtservice.extractUsername(jwt);
+        userEmail = jwtservice.extractUsername(jwt); // Here we have the username then we need to do the validation process
+        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) { // Check weather the userName is not null and the user is not authenticated
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail); // Trying to get the user from the database
+            // That "userDetailsService" is an interface that is given by the spring security core
+            if (jwtservice.isTakenValid(jwt, userDetails)){ // Checking whether the taken is valid
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities()
+                );// This object is needed by the spring security context holder to update the security context
+            authToken.setDetails(
+                    new WebAuthenticationDetailsSource().buildDetails(request) // Get the additional data from our web request
+            ); // Give more details to the token
+                SecurityContextHolder.getContext().setAuthentication(authToken); // Update the security context
+            }
+        }
+        filterChain.doFilter(request, response);
     }
 }
+
+// The JW authentication filter is ready to use
+
+// What next:
+    // We need to tell spring, which configurations do we need to user in order to make this whole process work
+    // We need to bind the filter to the process
+    // For that we need to create a new configuration class "SecurityConfiguration"
